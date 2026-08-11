@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+title: "deqcert: a dequantization certifier for parameterised quantum circuit encoders"
+message: "If you use this software, please cite both the software and the accompanying paper."
+type: software
+license: MIT
+repository-code: "https://github.com/vaibh-pra/Dequantization-Certifier"
+version: 0.1.0
+date-released: "2026-08-11"
+keywords:
+  - quantum machine learning
+  - dequantization
+  - classical surrogate
+  - parameterised quantum circuits
+  - dynamical Lie algebra
+  - quantum feature maps
+authors:
+  - given-names: "Vaibhav N."
+    family-names: Prakash
+    email: vaibhav.prakash@mahindrauniversity.edu.in
+    affiliation: "Mahindra University, Hyderabad, India"
+  - given-names: "Hilal Ahmad"
+    family-names: Bhat
+    affiliation: "Mahindra University, Hyderabad, India"
+preferred-citation:
+  type: article
+  title: "Certifying dequantization of parameterised quantum circuit encoders with explicit classical surrogates"
+  year: 2026
+  authors:
+    - given-names: "Vaibhav N."
+      family-names: Prakash
+      affiliation: "Mahindra University, Hyderabad, India"
+    - given-names: "Hilal Ahmad"
+      family-names: Bhat
+      affiliation: "Mahindra University, Hyderabad, India"

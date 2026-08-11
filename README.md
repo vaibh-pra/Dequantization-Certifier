@@ -166,12 +166,20 @@ The suite asserts the four verdicts reported in the paper. All but one run in
 under a second; certifying the 8-qubit `vqc_facedet` ansatz takes around 100
 seconds, since closing its dynamical Lie algebra is genuinely expensive.
 
+## Authors
+
+- **Vaibhav N. Prakash** — Mahindra University, Hyderabad, India
+- **Hilal Ahmad Bhat** — Mahindra University, Hyderabad, India
+
 ## Citation
 
 If you use this tool, please cite:
 
 > V. N. Prakash and H. A. Bhat, *Certifying dequantization of parameterised
 > quantum circuit encoders with explicit classical surrogates* (2026).
+
+Machine-readable metadata is in [`CITATION.cff`](CITATION.cff); GitHub renders it
+as a *Cite this repository* button.
 
 ## License
 
