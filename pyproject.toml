@@ -11,7 +11,7 @@ requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [
     { name = "Vaibhav N. Prakash", email = "vaibhav.prakash@mahindrauniversity.edu.in" },
-    { name = "Hilal Ahmad Bhat" },
+    { name = "Hilal Ahmad Bhat", email = "hilal.bhat@mahindrauniversity.edu.in" },
 ]
 keywords = [
     "quantum machine learning",
