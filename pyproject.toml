@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deqcert"
+version = "0.1.0"
+description = "A dequantization certifier for parameterised quantum circuit encoders, returning explicit classical surrogates."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Vaibhav N. Prakash", email = "vaibhav.prakash@mahindrauniversity.edu.in" },
+    { name = "Hilal Ahmad Bhat" },
+]
+keywords = [
+    "quantum machine learning",
+    "dequantization",
+    "classical surrogate",
+    "parameterised quantum circuits",
+    "dynamical Lie algebra",
+    "quantum feature maps",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+qiskit = ["qiskit>=1.0"]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+deqcert = "deqcert.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/vaibh-pra/Dequantization-Certifier"
+Issues = "https://github.com/vaibh-pra/Dequantization-Certifier/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/deqcert"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: certifications that take tens of seconds (deselect with -m 'not slow')",
+]
