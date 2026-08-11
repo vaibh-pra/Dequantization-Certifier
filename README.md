@@ -175,4 +175,4 @@ If you use this tool, please cite:
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
