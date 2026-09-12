@@ -4,8 +4,8 @@ message: "If you use this software, please cite both the software and the accomp
 type: software
 license: MIT
 repository-code: "https://github.com/vaibh-pra/Dequantization-Certifier"
-version: 0.1.0
-date-released: "2026-08-11"
+version: 0.2.0
+date-released: "2026-09-12"
 keywords:
   - quantum machine learning
   - dequantization
@@ -24,7 +24,7 @@ authors:
     affiliation: "Mahindra University, Hyderabad, India"
 preferred-citation:
   type: article
-  title: "Certifying dequantization of parameterised quantum circuit encoders with explicit classical surrogates"
+  title: "Classical surrogates for quantum circuit encoders with certified uniform error bounds"
   year: 2026
   authors:
     - given-names: "Vaibhav N."

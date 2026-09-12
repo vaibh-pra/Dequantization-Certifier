@@ -1,0 +1,343 @@
+{
+  "row": {
+    "name": "base",
+    "n": 4,
+    "readouts": 2,
+    "grids": "9/9",
+    "queries": 18,
+    "modes": 12,
+    "error_bound": 1.1318837221109233e-16,
+    "time_s": 0.011643973004538566,
+    "peak_rss_mb": 69.5859375,
+    "empirical_error": 7.216449660063518e-16,
+    "status": "certified"
+  },
+  "report": {
+    "name": "hqz_base",
+    "n_qubits": 4,
+    "dla_dim": null,
+    "dla_class": "",
+    "freq_dim": null,
+    "freq_class": "bounded",
+    "eff_dim": 12,
+    "certificate_error": 1.1318837221109233e-16,
+    "deployed_params": {
+      "a10": 3.448296944257913,
+      "b10": 4.493667318642264,
+      "a32": 3.787273988239316,
+      "b32": 3.4236020095353483
+    },
+    "surrogate_residual": null,
+    "basis": [
+      {
+        "readout": "Z0",
+        "channels": [
+          [
+            "data",
+            0,
+            1.0
+          ],
+          [
+            "data",
+            1,
+            1.0
+          ]
+        ],
+        "counts": [
+          1,
+          1
+        ],
+        "half_angle": [
+          false,
+          false
+        ],
+        "grid_sizes": [
+          3,
+          3
+        ],
+        "n_candidates": 9,
+        "queries": 9,
+        "n_terms": 6,
+        "terms": [
+          [
+            [
+              1.0,
+              0.0
+            ],
+            0.195754520483527,
+            0.23265529935742682
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ],
+            0.15212273975823648,
+            -0.11632764967871341
+          ],
+          [
+            [
+              1.0,
+              -1.0
+            ],
+            0.15212273975823648,
+            -0.11632764967871341
+          ],
+          [
+            [
+              -1.0,
+              0.0
+            ],
+            0.195754520483527,
+            -0.23265529935742682
+          ],
+          [
+            [
+              -1.0,
+              1.0
+            ],
+            0.15212273975823648,
+            0.11632764967871341
+          ],
+          [
+            [
+              -1.0,
+              -1.0
+            ],
+            0.15212273975823648,
+            0.11632764967871341
+          ]
+        ],
+        "coefficient_error_bound": 1.1318837221109233e-16,
+        "unpruned_error_bound": 1.1318837221109233e-16,
+        "discarded_error_bound": 6.689187384082699e-40,
+        "tolerance": 1e-10,
+        "certified": true,
+        "interval_dps": 40,
+        "representation": "complex_fourier",
+        "active_qubits": 2,
+        "construction_time_s": 0.005301050026901066,
+        "guarantee": "global mathematical error for normalized spec at fixed deployed parameters"
+      },
+      {
+        "readout": "Z2",
+        "channels": [
+          [
+            "data",
+            2,
+            1.0
+          ],
+          [
+            "data",
+            3,
+            1.0
+          ]
+        ],
+        "counts": [
+          1,
+          1
+        ],
+        "half_angle": [
+          false,
+          false
+        ],
+        "grid_sizes": [
+          3,
+          3
+        ],
+        "n_candidates": 9,
+        "queries": 9,
+        "n_terms": 6,
+        "terms": [
+          [
+            [
+              1.0,
+              0.0
+            ],
+            0.009875449579135132,
+            0.05556609714524362
+          ],
+          [
+            [
+              1.0,
+              1.0
+            ],
+            0.24506227521043242,
+            -0.02778304857262181
+          ],
+          [
+            [
+              1.0,
+              -1.0
+            ],
+            0.24506227521043242,
+            -0.02778304857262181
+          ],
+          [
+            [
+              -1.0,
+              0.0
+            ],
+            0.009875449579135132,
+            -0.05556609714524362
+          ],
+          [
+            [
+              -1.0,
+              1.0
+            ],
+            0.24506227521043242,
+            0.02778304857262181
+          ],
+          [
+            [
+              -1.0,
+              -1.0
+            ],
+            0.24506227521043242,
+            0.02778304857262181
+          ]
+        ],
+        "coefficient_error_bound": 8.626348145601942e-17,
+        "unpruned_error_bound": 8.626348145601942e-17,
+        "discarded_error_bound": 6.212937974500513e-40,
+        "tolerance": 1e-10,
+        "certified": true,
+        "interval_dps": 40,
+        "representation": "complex_fourier",
+        "active_qubits": 2,
+        "construction_time_s": 0.005924927012529224,
+        "guarantee": "global mathematical error for normalized spec at fixed deployed parameters"
+      }
+    ],
+    "coeffs": null,
+    "cost": {
+      "candidate_grid_points": [
+        9,
+        9
+      ],
+      "work_estimates": [
+        198,
+        198
+      ],
+      "construction_queries": 18,
+      "diagnostics_enabled": false,
+      "retained_fourier_modes": 12,
+      "construction_time_s": 0.01122597703943029
+    },
+    "verdict": "CERTIFIED epsilon surrogate",
+    "notes": [
+      "Demonstration instance: parameters drawn with seed=0; not a family-wide certificate.",
+      "Certificate: uniform error of the mathematical returned model for the normalized gate list at fixed parameters.",
+      "Fast floating-point evaluation has additional rounding error; use evaluate_enclosure for validated pointwise values."
+    ]
+  },
+  "metadata": {
+    "python": "3.10.12",
+    "numpy": "2.2.6",
+    "mpmath": "1.3.0",
+    "qiskit": "2.4.2",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+    "precision_dps": 40,
+    "seed": 0,
+    "tolerance": 1e-10,
+    "prune": 1e-14,
+    "max_basis": 8000,
+    "max_active_qubits": 6,
+    "max_work": 20000000,
+    "cpu": "Intel Core i5-1235U",
+    "max_harmonic": 32
+  },
+  "specification": {
+    "name": "hqz_base",
+    "n_qubits": 4,
+    "n_features": 4,
+    "gates": [
+      [
+        "rot",
+        "X",
+        0,
+        [
+          "data",
+          0,
+          1.0
+        ]
+      ],
+      [
+        "rot",
+        "X",
+        1,
+        [
+          "data",
+          1,
+          1.0
+        ]
+      ],
+      [
+        "rot",
+        "X",
+        2,
+        [
+          "data",
+          2,
+          1.0
+        ]
+      ],
+      [
+        "rot",
+        "X",
+        3,
+        [
+          "data",
+          3,
+          1.0
+        ]
+      ],
+      [
+        "crot",
+        "Z",
+        1,
+        0,
+        [
+          "param",
+          "a10"
+        ]
+      ],
+      [
+        "crot",
+        "X",
+        1,
+        0,
+        [
+          "param",
+          "b10"
+        ]
+      ],
+      [
+        "crot",
+        "Z",
+        3,
+        2,
+        [
+          "param",
+          "a32"
+        ]
+      ],
+      [
+        "crot",
+        "X",
+        3,
+        2,
+        [
+          "param",
+          "b32"
+        ]
+      ]
+    ],
+    "readouts": [
+      "Z0",
+      "Z2"
+    ],
+    "note": "base HQZ QCNN encoder"
+  }
+}

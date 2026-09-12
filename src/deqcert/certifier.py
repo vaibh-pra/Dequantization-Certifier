@@ -1,25 +1,7 @@
-"""
-PQC dequantization certifier with structure-aware exact surrogate extraction.
+"""PQC encoders, validated surrogate construction and optional diagnostics.
 
-Given a white-box PQC-encoder spec (and optionally query access to a deployed
-instance), report the two simulability axes (dynamical Lie algebra dimension and
-encoding-frequency dimension), extract an exact matched-classical surrogate when
-one exists, and emit a dequantization verdict.
-
-This file is built up in phases:
-  P0  spec + general statevector simulator + example encoders   <-- this commit
-  P1  DLA axis (Lie closure)
-  P2  encoding-frequency axis + C3
-  P3  structure-derived candidate basis + effective dimension
-  P4  structure-aware exact surrogate extraction (the core)
-  P5  cost / crossover
-  P6  verdict + entanglement flag + CLI
-  P7  validation suite
-
-Design choices (agreed): hybrid basis (structure-derived candidate + numeric
-exact fit + symbolic pruning); exponential-DLA circuits are diagnosed with a
-cheap entanglement/depth flag, not solved by a tensor-network backend in v1.
-CPU-only.
+The public certify() path uses validated.py. Legacy least-squares extraction is
+retained only as an explicitly uncertified exploratory interface.
 """
 from __future__ import annotations
 
@@ -227,10 +209,12 @@ class Report:
     name: str
     n_qubits: int = 0
     dla_dim: int | None = None
-    dla_class: str = ""          # "polynomial" / "exponential" / "unknown"
+    dla_class: str = ""          # completed closure or capped lower bound
     freq_dim: Any = None
     freq_class: str = ""         # "bounded" / "unbounded"
     eff_dim: int | None = None
+    certificate_error: float | None = None
+    deployed_params: dict = field(default_factory=dict)
     surrogate_residual: float | None = None
     basis: list = field(default_factory=list)
     coeffs: Any = None
@@ -378,7 +362,7 @@ def generators(spec: EncoderSpec):
             gens.append(_op({t: axis}, n) - _op({c: "Z", t: axis}, n))
         elif g[0] == "cnot":
             _, c, t = g
-            gens.append(_op({c: "Z", t: "X"}, n))
+            gens.append(-_op({c: "Z"}, n) - _op({t: "X"}, n) + _op({c: "Z", t: "X"}, n))
         elif g[0] == "h":
             gens.append(_op({g[1]: "X"}, n) + _op({g[1]: "Z"}, n))   # H ~ (X+Z)/sqrt2
     return gens
@@ -386,7 +370,7 @@ def generators(spec: EncoderSpec):
 
 def dla_dimension(spec: EncoderSpec, cap: int = 64, tol: float = 1e-7):
     """Lie-closure dimension of the full-circuit generators, capped. Returns
-    (dim, saturated): saturated=True means it hit the cap (exponential/large)."""
+    (dim, saturated): saturated=True means it hit the cap, giving a lower bound."""
     A = [-1j * g for g in generators(spec)]
 
     def vec(M):
@@ -426,20 +410,23 @@ def dla_dimension(spec: EncoderSpec, cap: int = 64, tol: float = 1e-7):
 def _p1_test():
     print("\nP1 full-circuit DLA dimension:")
     expect = {"hqz_base": "so(5)+so(5) = 20", "hqz_cross": "> 20 (pairs coupled)",
-              "reenc_pair": "so(5) = 10", "vqc_facedet": "saturates cap -> exponential"}
+              "reenc_pair": "so(5) = 10", "vqc_facedet": "capped lower bound"}
     for key, make in EXAMPLES.items():
         spec = make()
         d, sat = dla_dimension(spec)
-        tag = f">= {d} (saturated, exponential)" if sat else f"{d}"
-        print(f"  {key:<12} dim(g) = {tag:<28}  [{expect[key]}]")
+        tag = f">= {d} (capped)" if sat else f"{d}"
+        print(f"  {key:<12} dim(g) = {tag:<28}  [{expect.get(key, 'diagnostic only')}]")
 
 
 # ---------------------------------------------------------------------------
 # P2: encoding-frequency axis (the C3 test, structural)
 # ---------------------------------------------------------------------------
 def frequency_axis(spec: EncoderSpec):
-    """How each feature enters the circuit. A feature re-uploaded (>1 time) with a
-    trainable scale gives a continuous frequency set -> unbounded (C3 fires)."""
+    """Describe frequency structure across variable scales, not deployed hardness.
+
+    A trainable scale permits a continuous family of frequencies even with one
+    data gate. Each fixed deployed instance still has a finite dictionary.
+    """
     from collections import defaultdict
     count, param_scale = defaultdict(int), defaultdict(bool)
     for g in spec.gates:
@@ -453,7 +440,7 @@ def frequency_axis(spec: EncoderSpec):
                 for _coeff, feats in src[1]:    # fixed coeffs -> bounded
                     for f in feats:
                         count[f] += 1
-    unbounded = any(count[f] > 1 and param_scale[f] for f in count)
+    unbounded = any(param_scale.values())
     desc = {f: ("once" if count[f] == 1
                 else f"{count[f]}x" + (" trainable-scale" if param_scale[f] else " fixed-scale"))
             for f in sorted(count)}
@@ -500,17 +487,12 @@ import itertools
 
 
 def readout_support(spec, readout, params, eps=1e-4, n_probe=4, seed=0):
-    """Features the readout actually depends on, by finite-difference sensitivity."""
-    rng = np.random.RandomState(seed)
-    dep = set()
-    for _ in range(n_probe):
-        x = rng.uniform(0, 2 * np.pi, (1, spec.n_features))
-        base = simulate(spec, x, params)[readout][0]
-        for f in range(spec.n_features):
-            xp = x.copy(); xp[0, f] += eps
-            if abs(simulate(spec, xp, params)[readout][0] - base) > 1e-7:
-                dep.add(f)
-    return sorted(dep)
+    """Conservative structural feature support (legacy signature retained)."""
+    from .validated import lightcone
+    cone = lightcone(spec, readout)
+    return sorted(set().union(*(_src_features(g[-1]) for g in cone.gates
+                                if g[0] in ("rot", "crot"))))
+
 
 
 def _src_features(src):
@@ -542,9 +524,14 @@ def _channel_angles(channels, x):
     return [_angle(c, x, {}) for c in channels]      # list of (B,) arrays
 
 
-def channel_basis(C, K):
-    """Products over C channels of {1} U {cos(k.theta), sin(k.theta): k=1..K}."""
-    per = [("id", 0)] + [(t, k) for k in range(1, K + 1) for t in ("cos", "sin")]
+def channel_basis(C, K, half=False):
+    """Products over C channels of {1} U {cos(k.theta), sin(k.theta)}.
+    half=False: integer harmonics k = 1..K (Corollary 1, uncontrolled data gates).
+    half=True : half-integer harmonics k = 1/2, 1, ..., K (Theorem 1, needed when a
+    channel carries a controlled data gate, whose zero eigenvalue produces
+    cos(theta/2)-type terms)."""
+    ks = [m / 2 for m in range(1, 2 * K + 1)] if half else list(range(1, K + 1))
+    per = [("id", 0)] + [(t, k) for k in ks for t in ("cos", "sin")]
     return [[(ci, k, t) for ci, (t, k) in enumerate(combo) if t != "id"]
             for combo in itertools.product(per, repeat=C)]
 
@@ -558,33 +545,64 @@ def eval_channel_basis(basis, angles, B):
     return Phi
 
 
-def extract_surrogate(spec, readout, params, oversample=3, prune=1e-8, Kmax=3,
+def harmonic_bound(spec, channels):
+    """Theorem 1 / Corollary 1 (paper App. B): per-channel harmonic bound r_c, where
+    r_c counts the accepted data gates (rot/crot) whose angle source is channel c's
+    data or data_poly expression. Every accepted data gate is exp(-i theta H / 2)
+    with spec(H) in {-1, 0, +1}, so the readout's harmonics in the channel angle are
+    at most r_c; they are integers when every data gate on the channel is
+    uncontrolled (spec(H) = {-1, +1}) and half-integers otherwise. Trainable-scale
+    re-uploads are excluded upstream by angle_channels (frequency-escape branch).
+    Returns (max_c r_c, per-channel dict)."""
+    keys = [repr(c) for c in channels]
+    rc = {ci: 0 for ci in range(len(channels))}
+    for g in spec.gates:
+        if g[0] in ("rot", "crot") and repr(g[-1]) in keys:
+            rc[keys.index(repr(g[-1]))] += 1
+    return max(rc.values(), default=0), rc
+
+
+def has_controlled_data_gate(spec, channels):
+    """True if any data gate on any of `channels` is a controlled rotation, in
+    which case the half-angle basis of Theorem 1 is required (Corollary 1 does
+    not apply)."""
+    keys = {repr(c) for c in channels}
+    return any(g[0] == "crot" and repr(g[-1]) in keys for g in spec.gates)
+
+
+def extract_surrogate(spec, readout, params, K=None, prune=1e-8,
                       max_basis=8000, seed=0):
-    """Fit the deployed readout on the channel basis, growing the harmonic order K
-    until the held-out residual vanishes. Returns the explicit (pruned) surrogate."""
+    """Exploratory least-squares fit; never a certificate.
+
+    Reports numerical rank, conditioning and the residual AFTER coefficient
+    pruning. Use certify() for interval-validated Fourier reconstruction.
+    """
     rng = np.random.RandomState(seed)
     S = readout_support(spec, readout, params, seed=seed)
     channels = angle_channels(spec, S)
+    Kth, _ = harmonic_bound(spec, channels)
+    if K is None:
+        K = Kth
+    half = has_controlled_data_gate(spec, channels)
+    Bn = (4*K+1 if half else 2*K+1) ** len(channels)
+    if Bn > max_basis:
+        return None
+    basis = channel_basis(len(channels), K, half=half)
+    Xq = rng.uniform(0, 2 * np.pi, (2 * Bn + 16, spec.n_features))
+    Phi = eval_channel_basis(basis, _channel_angles(channels, Xq), Xq.shape[0])
+    c, _, rank, singular_values = np.linalg.lstsq(Phi, simulate(spec, Xq, params)[readout], rcond=None)
     Xt = rng.uniform(0, 2 * np.pi, (300, spec.n_features))
     ft = simulate(spec, Xt, params)[readout]
     angt = _channel_angles(channels, Xt)
-    result = None
-    for K in range(1, Kmax + 1):
-        basis = channel_basis(len(channels), K)
-        Bn = len(basis)
-        if Bn > max_basis:
-            break
-        Xq = rng.uniform(0, 2 * np.pi, (oversample * Bn + 5, spec.n_features))
-        Phi = eval_channel_basis(basis, _channel_angles(channels, Xq), Xq.shape[0])
-        c, *_ = np.linalg.lstsq(Phi, simulate(spec, Xq, params)[readout], rcond=None)
-        residual = float(np.max(np.abs(eval_channel_basis(basis, angt, 300) @ c - ft)))
-        terms = [(basis[i], float(c[i])) for i in range(Bn) if abs(c[i]) > prune]
-        result = dict(readout=readout, support=S, channels=channels, harmonic_K=K,
-                      n_channels=len(channels), n_candidates=Bn, queries=len(Xq),
-                      n_terms=len(terms), residual=residual, terms=terms)
-        if residual < 1e-8:
-            break
-    return result
+    c[np.abs(c) <= prune] = 0.0
+    residual = float(np.max(np.abs(eval_channel_basis(basis, angt, 300) @ c - ft)))
+    terms = [(basis[i], float(c[i])) for i in range(Bn) if c[i] != 0]
+    return dict(readout=readout, support=S, channels=channels, harmonic_K=K,
+                bound_K=Kth, half_angle=half, at_bound=(K >= Kth),
+                n_channels=len(channels), n_candidates=Bn, queries=len(Xq),
+                n_terms=len(terms), residual=residual, terms=terms, rank=int(rank),
+                condition_number=float(singular_values[0]/singular_values[-1]) if rank == Bn else float("inf"),
+                certified=False, guarantee="empirical holdout validation only")
 
 
 def _fmt_term(terms_coeff):
@@ -630,82 +648,73 @@ def mean_entanglement(spec, cut=None, n_samples=8, L=2.0, seed=0):
 # ---------------------------------------------------------------------------
 # P6: the certifier (combine axes -> verdict) + report
 # ---------------------------------------------------------------------------
-def certify(spec: EncoderSpec, deployed_params=None, cap=64, P=200, G=200, seed=0):
-    rep = Report(name=spec.name, n_qubits=spec.n_qubits)
-    rep.dla_dim, dla_sat = dla_dimension(spec, cap=cap)
-    rep.dla_class = "exponential (>= cap)" if dla_sat else "small/polynomial"
-    fdesc, rep.freq_class = frequency_axis(spec)
-    rep.eff_dim, eff_capped = effective_dimension(spec, P=P, G=G, seed=seed)
-    rep.notes.append(f"features: {fdesc}")
-    rep.notes.append(f"full-circuit DLA dim = {rep.dla_dim} ({rep.dla_class}); "
-                     "note: a large full DLA does not by itself prevent dequantization, "
-                     "the readout function class governs that.")
+def certify(spec: EncoderSpec, deployed_params=None, cap=64, P=200, G=200, seed=0,
+            K=None, tolerance=1e-10, prune=1e-14, dps=40, max_basis=8000,
+            max_active_qubits=6, max_work=20_000_000, diagnostics=False):
+    """Construct a global epsilon certificate for ONE deployed encoder instance.
 
-    if rep.freq_class == "unbounded":
-        rep.verdict = "ESCAPED via the encoding-frequency axis (data re-uploading)"
-        rep.notes.append("Function class leaves any finite basis as the trainable scales "
-                         "range; the matched-classical basis grows with the re-encoding "
-                         "range (located crossover d ~ 5-7).")
-        rep.notes.append("A DEPLOYED instance at fixed scales is still exactly surrogatable "
-                         "on its realized finite frequency set.")
-    elif eff_capped:
-        rep.verdict = "ESCAPED via the dynamical Lie algebra (expressive ansatz)"
-        ent, entmax = mean_entanglement(spec, seed=seed)
-        rep.notes.append(f"Readout function class is large (eff dim >= {rep.eff_dim}); "
-                         "no small matched-classical basis.")
-        if ent < 0.5 * entmax:
-            rep.notes.append(f"BUT low entanglement ({ent:.2f}/{entmax:.0f} bits across the "
-                             "cut) => likely tensor-network simulable; not a quantum win.")
-        else:
-            rep.notes.append(f"High entanglement ({ent:.2f}/{entmax:.0f} bits) => genuinely "
-                             "expensive, and barren-plateau-prone (untrainable at scale).")
-    else:
-        if deployed_params is None:
-            rngp = np.random.RandomState(seed)
-            deployed_params = _sample_params(spec, rngp, L=1.0)
-        Bsum, maxres = 0, 0.0
-        for r in spec.readouts:
-            sr = extract_surrogate(spec, r, deployed_params, seed=seed)
-            Bsum += sr["n_terms"]
-            maxres = max(maxres, sr["residual"])
-            rep.basis.append(sr)
-            rep.notes.append(f"surrogate[{r}]: {sr['n_terms']} terms, "
-                             f"{sr['queries']} queries, residual {sr['residual']:.2e}")
-        rep.eff_dim = Bsum
-        rep.surrogate_residual = maxres
-        if maxres > 1e-6:                       # residual-gated verdict (honest)
-            rep.verdict = ("NOT dequantizable in the per-feature trigonometric basis "
-                           f"(surrogate residual {maxres:.1e})")
-            rep.notes.append("The encoding produces frequencies outside the "
-                             "{1, cos x_i, sin x_i} per-feature basis (e.g. a product / "
-                             "data-entangling feature map). A cross-frequency basis "
-                             "extension is needed to certify or refute dequantization.")
-        else:
-            rep.verdict = "DEQUANTIZABLE (bounded function class)"
-            rep.cost = {"classical_terms_B": Bsum, "statevector_dim_2^n": 2 ** spec.n_qubits,
-                        "verdict": "classical O(B) eval, no shots; quantum pays O(2^n) "
-                                   "(sim) or O(shots) (QPU)"}
+    Bounds use interval arithmetic and an exact tensor-grid Fourier identity.
+    Sampling ranks, DLA size and entanglement never determine certification.
+    Missing deployed_params selects a reproducible example instance (recorded in
+    the report). Resource refusal happens before circuit evaluation. K overrides
+    are legacy exploratory requests and can never obtain a certificate.
+    """
+    from .validated import validate_spec, plan_readout, reconstruct
+    rep = Report(name=spec.name, n_qubits=spec.n_qubits)
+    if deployed_params is None:
+        deployed_params = _sample_params(spec, np.random.RandomState(seed), L=1.0)
+        rep.notes.append(f"Demonstration instance: parameters drawn with seed={seed}; not a family-wide certificate.")
+    rep.deployed_params = dict(deployed_params)
+    validate_spec(spec, deployed_params)
+    if K is not None:
+        rep.verdict = "INCONCLUSIVE (manual K override): use extract_surrogate for exploratory fitting"
+        return rep
+    if not math.isfinite(tolerance) or tolerance <= 0:
+        raise ValueError("tolerance must be finite and positive")
+    if not math.isfinite(prune) or prune < 0 or not isinstance(dps, int) or dps < 20:
+        raise ValueError("invalid pruning tolerance or interval precision")
+    _, rep.freq_class = frequency_axis(spec)
+    if spec.scale_params():
+        rep.notes.append("Trainable scales are frozen at the recorded deployed values; no common fixed-frequency family claim.")
+    plans = [plan_readout(spec, r, deployed_params, max_basis=max_basis,
+                         max_active_qubits=max_active_qubits, max_work=max_work)
+             for r in spec.readouts]
+    rep.cost = {"candidate_grid_points": [p["points"] for p in plans],
+                "work_estimates": [p["work"] for p in plans],
+                "construction_queries": 0, "diagnostics_enabled": diagnostics}
+    reasons = [f"{r}: {', '.join(p['reasons'])}" for r, p in zip(spec.readouts, plans) if p["reasons"]]
+    if reasons:
+        rep.verdict = "INCONCLUSIVE (resource budget)"
+        rep.notes.extend(reasons)
+        return rep
+    for r, plan in zip(spec.readouts, plans):
+        sr = reconstruct(plan, deployed_params, r, tolerance=tolerance, prune=prune, dps=dps)
+        rep.basis.append(sr)
+        rep.cost["construction_queries"] += sr["queries"]
+    rep.eff_dim = sum(b["n_terms"] for b in rep.basis)  # retained modes, not a function-class dimension
+    rep.certificate_error = max(b["coefficient_error_bound"] for b in rep.basis)
+    rep.cost["retained_fourier_modes"] = rep.eff_dim
+    rep.cost["construction_time_s"] = sum(b["construction_time_s"] for b in rep.basis)
+    rep.verdict = ("CERTIFIED epsilon surrogate" if all(b["certified"] for b in rep.basis)
+                   else "SURROGATE FOUND (requested error tolerance not met)")
+    rep.notes.append("Certificate: uniform error of the mathematical returned model for the normalized gate list at fixed parameters.")
+    rep.notes.append("Fast floating-point evaluation has additional rounding error; use evaluate_enclosure for validated pointwise values.")
+    if diagnostics:
+        rep.dla_dim, saturated = dla_dimension(spec, cap=cap)
+        rep.dla_class = "capped lower bound" if saturated else "closure completed at this width"
+        ed, capped = effective_dimension(spec, P=P, G=G, seed=seed)
+        rep.notes.append(f"Optional sampled function-class rank {ed}{' (sample capped)' if capped else ''}; no hardness inference.")
     return rep
 
 
 def print_report(rep: Report):
-    line = "=" * 72
-    print(f"\n{line}\n  DEQUANTIZATION CERTIFICATE: {rep.name}  (n = {rep.n_qubits} qubits)\n{line}")
-    print(f"  VERDICT:  {rep.verdict}")
-    if rep.surrogate_residual is not None:
-        print(f"  surrogate basis size B = {rep.eff_dim}   certified residual = "
-              f"{rep.surrogate_residual:.2e}")
-        if rep.cost:
-            print(f"  cost: classical O({rep.cost['classical_terms_B']}) vs "
-                  f"statevector O({rep.cost['statevector_dim_2^n']})")
-    else:
-        print(f"  effective dimension ~ {rep.eff_dim}    freq axis: {rep.freq_class}")
-    for nt in rep.notes:
-        print(f"    - {nt}")
-    if rep.basis and rep.basis[0]["n_terms"] <= 12:
-        b0 = rep.basis[0]
-        print(f"  explicit surrogate [{b0['readout']}]:  "
-              + "  ".join(_fmt_term(t) for t in b0["terms"]))
+    print(f"{rep.name}: {rep.verdict}")
+    if rep.certificate_error is not None:
+        print(f"  global coefficient/construction error <= {rep.certificate_error:.3e}")
+        print(f"  {rep.eff_dim} retained Fourier modes; {rep.cost['construction_queries']} interval circuit evaluations")
+    print(f"  deployed parameters: {rep.deployed_params}")
+    for note in rep.notes:
+        print(f"  {note}")
 
 
 # ---------------------------------------------------------------------------

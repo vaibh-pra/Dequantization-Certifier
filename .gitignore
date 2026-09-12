@@ -7,3 +7,5 @@ dist/
 .venv/
 venv/
 .DS_Store
+*.bak*
+benchmark_results/
